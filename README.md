@@ -1,2 +1,2 @@
 # codecollab
-Real-Time Collaborative Code Execution Platform - Microservices on Kubernetes
+Real-Time Collaborative Code Execution Platform built with Microservices Architecture and Kubernetes Orchestration.
