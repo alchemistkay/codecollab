@@ -1,0 +1,82 @@
+services:
+  # Session Service (Python/FastAPI)
+  session-service:
+    build:
+      context: ../../services/session-service
+      dockerfile: Dockerfile
+    container_name: codecollab-session
+    environment:
+      DATABASE_URL: postgresql://codecollab:${POSTGRES_PASSWORD:-codecollab_secure_pass}@postgres:5432/codecollab
+      PORT: 8001
+      CORS_ORIGINS: "*"
+    ports:
+      - "8001:8001"
+    networks:
+      - codecollab-network
+      - postgres_postgres-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Execution Service (Go)
+  execution-service:
+    build:
+      context: ../../services/execution-service
+      dockerfile: Dockerfile
+    container_name: codecollab-execution
+    environment:
+      PORT: 8002
+      GIN_MODE: release
+    ports:
+      - "8002:8002"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - codecollab-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Collaboration Service (Node.js)
+  collaboration-service:
+    build:
+      context: ../../services/collaboration-service
+      dockerfile: Dockerfile
+    container_name: codecollab-collaboration
+    environment:
+      PORT: 8003
+      NODE_ENV: production
+    ports:
+      - "8003:8003"
+    networks:
+      - codecollab-network
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8003/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend (React)
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: codecollab-frontend
+    ports:
+      - "8080:80"
+    depends_on:
+      - session-service
+      - execution-service
+      - collaboration-service
+    networks:
+      - codecollab-network
+
+networks:
+  codecollab-network:
+    driver: bridge
+  postgres_postgres-network:
+    external: true

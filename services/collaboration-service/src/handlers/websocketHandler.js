@@ -1,5 +1,8 @@
 import sessionStore from '../models/sessionStore.js';
 
+const PING_INTERVAL = 30000; // 30 seconds
+const CLIENT_TIMEOUT = 60000; // 60 seconds
+
 export function handleWebSocket(ws, req) {
     const url = new URL(req.url, 'ws://localhost');
     const sessionId = url.searchParams.get('session');
@@ -15,6 +18,7 @@ export function handleWebSocket(ws, req) {
     const session = sessionStore.createSession(sessionId);
     sessionStore.addUserToSession(sessionId, userId, ws);
 
+    // Send initial state
     ws.send(JSON.stringify({
         type: 'init',
         sessionId,
@@ -25,7 +29,25 @@ export function handleWebSocket(ws, req) {
 
     broadcastUserList(sessionId);
 
+    // Setup ping interval
+    let isAlive = true;
+    const pingInterval = setInterval(() => {
+        if (!isAlive) {
+            clearInterval(pingInterval);
+            ws.terminate();
+            return;
+        }
+        isAlive = false;
+        ws.ping();
+    }, PING_INTERVAL);
+
+    // Handle pong responses
+    ws.on('pong', () => {
+        isAlive = true;
+    });
+
     ws.on('message', (data) => {
+        isAlive = true; // Reset timeout on any message
         try {
             const message = JSON.parse(data.toString());
             handleMessage(sessionId, userId, message, ws);
@@ -36,12 +58,14 @@ export function handleWebSocket(ws, req) {
 
     ws.on('close', () => {
         console.log(`User ${userId} disconnected from session ${sessionId}`);
+        clearInterval(pingInterval);
         sessionStore.removeUserFromSession(sessionId, userId);
         broadcastUserList(sessionId);
     });
 
     ws.on('error', (error) => {
         console.error('WebSocket error:', error);
+        clearInterval(pingInterval);
     });
 }
 
@@ -74,6 +98,11 @@ function handleMessage(sessionId, userId, message, ws) {
                     userId
                 });
             }
+            break;
+
+        case 'ping':
+            // Client ping - respond with pong
+            ws.send(JSON.stringify({ type: 'pong' }));
             break;
 
         default:
