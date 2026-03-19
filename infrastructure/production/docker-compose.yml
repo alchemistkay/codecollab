@@ -1,0 +1,101 @@
+services:
+  # Session Service (Python/FastAPI)
+  session-service:
+    image: ghcr.io/alchemistkay/codecollab/session-service:latest
+    build:
+      context: ../../services/session-service
+      dockerfile: Dockerfile
+    container_name: codecollab-session-prod
+    environment:
+      DATABASE_URL: postgresql://codecollab:${POSTGRES_PASSWORD}@postgres:5432/codecollab
+      PORT: 8001
+      CORS_ORIGINS: "https://codecollab.k4scloud.com"
+    restart: unless-stopped
+    networks:
+      - traefik-network
+      - postgres_postgres-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.codecollab-session.rule=Host(`codecollab.k4scloud.com`) && PathPrefix(`/api/sessions`)"
+      - "traefik.http.routers.codecollab-session.entrypoints=websecure"
+      - "traefik.http.routers.codecollab-session.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.codecollab-session.priority=10"
+      # Strip /api prefix
+      - "traefik.http.middlewares.codecollab-session-stripprefix.stripprefix.prefixes=/api"
+      - "traefik.http.routers.codecollab-session.middlewares=codecollab-session-stripprefix"
+      - "traefik.http.services.codecollab-session.loadbalancer.server.port=8001"
+
+  # Execution Service (Go)
+  execution-service:
+    image: ghcr.io/alchemistkay/codecollab/execution-service:latest
+    build:
+      context: ../../services/execution-service
+      dockerfile: Dockerfile
+    container_name: codecollab-execution-prod
+    environment:
+      PORT: 8002
+      GIN_MODE: release
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.codecollab-execution.rule=Host(`codecollab.k4scloud.com`) && PathPrefix(`/api/execute`)"
+      - "traefik.http.routers.codecollab-execution.entrypoints=websecure"
+      - "traefik.http.routers.codecollab-execution.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.codecollab-execution.priority=10"
+      # Strip /api prefix
+      - "traefik.http.middlewares.codecollab-execution-stripprefix.stripprefix.prefixes=/api"
+      - "traefik.http.routers.codecollab-execution.middlewares=codecollab-execution-stripprefix"
+      - "traefik.http.services.codecollab-execution.loadbalancer.server.port=8002"
+
+  # Collaboration Service (Node.js)
+  collaboration-service:
+    image: ghcr.io/alchemistkay/codecollab/collaboration-service:latest
+    build:
+      context: ../../services/collaboration-service
+      dockerfile: Dockerfile
+    container_name: codecollab-collaboration-prod
+    environment:
+      PORT: 8003
+      NODE_ENV: production
+    restart: unless-stopped
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.codecollab-ws.rule=Host(`codecollab.k4scloud.com`) && PathPrefix(`/ws`)"
+      - "traefik.http.routers.codecollab-ws.entrypoints=websecure"
+      - "traefik.http.routers.codecollab-ws.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.codecollab-ws.priority=10"
+      - "traefik.http.services.codecollab-ws.loadbalancer.server.port=8003"
+
+  # Frontend (React)
+  frontend:
+    image: ghcr.io/alchemistkay/codecollab/frontend:latest
+    build:
+      context: ../../frontend
+      dockerfile: Dockerfile
+    container_name: codecollab-frontend-prod
+    restart: unless-stopped
+    networks:
+      - traefik-network
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=traefik-network"
+      - "traefik.http.routers.codecollab.rule=Host(`codecollab.k4scloud.com`)"
+      - "traefik.http.routers.codecollab.entrypoints=websecure"
+      - "traefik.http.routers.codecollab.tls.certresolver=letsencrypt"
+      - "traefik.http.routers.codecollab.priority=1"
+      - "traefik.http.services.codecollab.loadbalancer.server.port=80"
+
+networks:
+  traefik-network:
+    external: true
+  postgres_postgres-network:
+    external: true
