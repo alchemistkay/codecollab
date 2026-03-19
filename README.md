@@ -185,7 +185,7 @@ MIT License - see LICENSE file
 
 **Kay Alchemist**
 - GitHub: [@alchemistkay](https://github.com/alchemistkay)
-- LinkedIn: [Your LinkedIn]
+- LinkedIn: [Kwaku Danso](linkedin.com/in/kwaku-danso-366196120)
 
 ## Acknowledgments
 
