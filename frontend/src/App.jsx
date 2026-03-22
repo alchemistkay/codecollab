@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import CodeEditor from './components/CodeEditor';
 import OutputPanel from './components/OutputPanel';
-import { sessionAPI, executionAPI } from './services/api';
+import { sessionAPI } from './services/api';
 import { useCollaboration } from './hooks/useCollaboration';
 import { Play, Users, Copy, Check } from 'lucide-react';
 
@@ -19,27 +19,45 @@ function App() {
     const [duration, setDuration] = useState(null);
     const [executing, setExecuting] = useState(false);
     const [copied, setCopied] = useState(false);
+    const [executingUser, setExecutingUser] = useState(null);
 
     const handleCodeUpdate = useCallback((newCode) => {
         setCode(newCode);
     }, []);
 
-    const { connected, users, sendCodeChange } = useCollaboration(
+    const handleExecutionResult = useCallback((result, fromUserId) => {
+        setOutput(result.output || '');
+        setError(result.error || '');
+        setExitCode(result.exit_code);
+        setDuration(result.duration_ms);
+        setExecuting(false);
+        setExecutingUser(null);
+    }, []);
+
+    const handleExecutionStarted = useCallback((fromUserId) => {
+        setExecuting(true);
+        setExecutingUser(fromUserId);
+        setOutput('');
+        setError('');
+        setExitCode(null);
+        setDuration(null);
+    }, []);
+
+    const { connected, users, sendCodeChange, executeCode } = useCollaboration(
         sessionId,
         userId,
-        handleCodeUpdate
+        handleCodeUpdate,
+        handleExecutionResult,
+        handleExecutionStarted
     );
 
     useEffect(() => {
-        // Get session from URL or create new one
         const urlParams = new URLSearchParams(window.location.search);
         const urlSessionId = urlParams.get('session');
         
         if (urlSessionId) {
-            // Join existing session
             loadSession(urlSessionId);
         } else {
-            // Create new session
             createNewSession();
         }
     }, []);
@@ -61,7 +79,6 @@ function App() {
         try {
             const session = await sessionAPI.create('Untitled Session', language);
             setSessionId(session.id);
-            // Update URL without reload
             window.history.pushState({}, '', `?session=${session.id}`);
             console.log('Session created:', session.id);
         } catch (error) {
@@ -76,24 +93,11 @@ function App() {
         }
     };
 
-    const handleRunCode = async () => {
-        setExecuting(true);
-        setOutput('');
-        setError('');
-        setExitCode(null);
-        setDuration(null);
-
-        try {
-            const result = await executionAPI.execute(sessionId, language, code);
-            setOutput(result.output);
-            setError(result.error);
-            setExitCode(result.exit_code);
-            setDuration(result.duration_ms);
-        } catch (error) {
-            setError(`Execution failed: ${error.message}`);
-            setExitCode(1);
-        } finally {
-            setExecuting(false);
+    const handleRunCode = () => {
+        if (connected) {
+            setExecuting(true);
+            setExecutingUser(userId);
+            executeCode(language, code);
         }
     };
 
@@ -112,7 +116,6 @@ function App() {
             backgroundColor: '#1e1e1e',
             color: '#d4d4d4'
         }}>
-            {/* Header */}
             <header style={{
                 padding: '12px 24px',
                 backgroundColor: '#2d2d30',
@@ -172,14 +175,14 @@ function App() {
 
                     <button
                         onClick={handleRunCode}
-                        disabled={executing}
+                        disabled={executing || !connected}
                         style={{
                             padding: '8px 16px',
-                            backgroundColor: executing ? '#3c3c3c' : '#0e639c',
+                            backgroundColor: executing || !connected ? '#3c3c3c' : '#0e639c',
                             color: '#fff',
                             border: 'none',
                             borderRadius: '4px',
-                            cursor: executing ? 'not-allowed' : 'pointer',
+                            cursor: executing || !connected ? 'not-allowed' : 'pointer',
                             display: 'flex',
                             alignItems: 'center',
                             gap: '8px',
@@ -187,7 +190,7 @@ function App() {
                         }}
                     >
                         <Play size={16} />
-                        {executing ? 'Running...' : 'Run Code'}
+                        {executing ? (executingUser === userId ? 'Running...' : 'Running...') : 'Run Code'}
                     </button>
 
                     <div style={{
@@ -212,7 +215,6 @@ function App() {
                 </div>
             </header>
 
-            {/* Main Content */}
             <div style={{
                 flex: 1,
                 display: 'grid',
@@ -240,7 +242,6 @@ function App() {
                 </div>
             </div>
 
-            {/* Footer */}
             <footer style={{
                 padding: '8px 24px',
                 backgroundColor: '#007acc',

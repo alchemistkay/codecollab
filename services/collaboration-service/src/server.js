@@ -27,4 +27,5 @@ server.listen(PORT, () => {
     console.log(`Collaboration Service running on port ${PORT}`);
     console.log(`WebSocket: ws://localhost:${PORT}`);
     console.log(`HTTP API: http://localhost:${PORT}`);
+    console.log(`Execution API: ${process.env.EXECUTION_API || 'http://execution-service:8002'}`);
 });

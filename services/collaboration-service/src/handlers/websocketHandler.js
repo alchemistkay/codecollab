@@ -1,7 +1,8 @@
 import sessionStore from '../models/sessionStore.js';
+import axios from 'axios';
 
-const PING_INTERVAL = 30000; // 30 seconds
-const CLIENT_TIMEOUT = 60000; // 60 seconds
+const PING_INTERVAL = 30000;
+const EXECUTION_API = process.env.EXECUTION_API || 'http://execution-service:8002';
 
 export function handleWebSocket(ws, req) {
     const url = new URL(req.url, 'ws://localhost');
@@ -18,7 +19,6 @@ export function handleWebSocket(ws, req) {
     const session = sessionStore.createSession(sessionId);
     sessionStore.addUserToSession(sessionId, userId, ws);
 
-    // Send initial state
     ws.send(JSON.stringify({
         type: 'init',
         sessionId,
@@ -29,7 +29,6 @@ export function handleWebSocket(ws, req) {
 
     broadcastUserList(sessionId);
 
-    // Setup ping interval
     let isAlive = true;
     const pingInterval = setInterval(() => {
         if (!isAlive) {
@@ -41,13 +40,12 @@ export function handleWebSocket(ws, req) {
         ws.ping();
     }, PING_INTERVAL);
 
-    // Handle pong responses
     ws.on('pong', () => {
         isAlive = true;
     });
 
     ws.on('message', (data) => {
-        isAlive = true; // Reset timeout on any message
+        isAlive = true;
         try {
             const message = JSON.parse(data.toString());
             handleMessage(sessionId, userId, message, ws);
@@ -69,7 +67,7 @@ export function handleWebSocket(ws, req) {
     });
 }
 
-function handleMessage(sessionId, userId, message, ws) {
+async function handleMessage(sessionId, userId, message, ws) {
     switch (message.type) {
         case 'code_change':
             sessionStore.updateCode(sessionId, message.code);
@@ -78,6 +76,11 @@ function handleMessage(sessionId, userId, message, ws) {
                 code: message.code,
                 userId
             }, userId);
+            break;
+
+        case 'execute_code':
+            // Execute code and broadcast result to all users
+            await handleExecuteCode(sessionId, userId, message);
             break;
 
         case 'cursor_position':
@@ -101,12 +104,49 @@ function handleMessage(sessionId, userId, message, ws) {
             break;
 
         case 'ping':
-            // Client ping - respond with pong
             ws.send(JSON.stringify({ type: 'pong' }));
             break;
 
         default:
             console.log('Unknown message type:', message.type);
+    }
+}
+
+async function handleExecuteCode(sessionId, userId, message) {
+    try {
+        // Broadcast that execution started
+        broadcast(sessionId, {
+            type: 'execution_started',
+            userId
+        });
+
+        // Call execution service
+        const response = await axios.post(`${EXECUTION_API}/execute`, {
+            session_id: sessionId,
+            language: message.language,
+            code: message.code
+        });
+
+        // Broadcast result to all users
+        broadcast(sessionId, {
+            type: 'execution_result',
+            result: response.data,
+            userId
+        });
+
+    } catch (error) {
+        console.error('Execution error:', error);
+        
+        // Broadcast error to all users
+        broadcast(sessionId, {
+            type: 'execution_result',
+            result: {
+                status: 'failed',
+                error: error.message,
+                exit_code: 1
+            },
+            userId
+        });
     }
 }
 

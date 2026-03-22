@@ -1,5 +1,4 @@
 services:
-  # Session Service (Python/FastAPI)
   session-service:
     image: ghcr.io/alchemistkay/codecollab/session-service:latest
     build:
@@ -21,12 +20,10 @@ services:
       - "traefik.http.routers.codecollab-session.entrypoints=websecure"
       - "traefik.http.routers.codecollab-session.tls.certresolver=letsencrypt"
       - "traefik.http.routers.codecollab-session.priority=10"
-      # Strip /api prefix
       - "traefik.http.middlewares.codecollab-session-stripprefix.stripprefix.prefixes=/api"
       - "traefik.http.routers.codecollab-session.middlewares=codecollab-session-stripprefix"
       - "traefik.http.services.codecollab-session.loadbalancer.server.port=8001"
 
-  # Execution Service (Go)
   execution-service:
     image: ghcr.io/alchemistkay/codecollab/execution-service:latest
     build:
@@ -48,12 +45,10 @@ services:
       - "traefik.http.routers.codecollab-execution.entrypoints=websecure"
       - "traefik.http.routers.codecollab-execution.tls.certresolver=letsencrypt"
       - "traefik.http.routers.codecollab-execution.priority=10"
-      # Strip /api prefix
       - "traefik.http.middlewares.codecollab-execution-stripprefix.stripprefix.prefixes=/api"
       - "traefik.http.routers.codecollab-execution.middlewares=codecollab-execution-stripprefix"
       - "traefik.http.services.codecollab-execution.loadbalancer.server.port=8002"
 
-  # Collaboration Service (Node.js)
   collaboration-service:
     image: ghcr.io/alchemistkay/codecollab/collaboration-service:latest
     build:
@@ -63,6 +58,7 @@ services:
     environment:
       PORT: 8003
       NODE_ENV: production
+      EXECUTION_API: http://execution-service:8002
     restart: unless-stopped
     networks:
       - traefik-network
@@ -75,7 +71,6 @@ services:
       - "traefik.http.routers.codecollab-ws.priority=10"
       - "traefik.http.services.codecollab-ws.loadbalancer.server.port=8003"
 
-  # Frontend (React)
   frontend:
     image: ghcr.io/alchemistkay/codecollab/frontend:latest
     build:

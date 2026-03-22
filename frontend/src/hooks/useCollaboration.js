@@ -14,7 +14,7 @@ const getWebSocketURL = () => {
 const RECONNECT_INTERVAL = 3000;
 const PING_INTERVAL = 25000;
 
-export function useCollaboration(sessionId, userId, onCodeUpdate) {
+export function useCollaboration(sessionId, userId, onCodeUpdate, onExecutionResult, onExecutionStarted) {
     const [connected, setConnected] = useState(false);
     const [users, setUsers] = useState([]);
     const wsRef = useRef(null);
@@ -32,7 +32,6 @@ export function useCollaboration(sessionId, userId, onCodeUpdate) {
             console.log('WebSocket connected');
             setConnected(true);
             
-            // Start ping interval
             pingTimerRef.current = setInterval(() => {
                 if (ws.readyState === WebSocket.OPEN) {
                     ws.send(JSON.stringify({ type: 'ping' }));
@@ -60,8 +59,19 @@ export function useCollaboration(sessionId, userId, onCodeUpdate) {
                     setUsers(message.users);
                     break;
 
+                case 'execution_started':
+                    if (onExecutionStarted) {
+                        onExecutionStarted(message.userId);
+                    }
+                    break;
+
+                case 'execution_result':
+                    if (onExecutionResult) {
+                        onExecutionResult(message.result, message.userId);
+                    }
+                    break;
+
                 case 'pong':
-                    // Server responded to ping
                     break;
                 
                 default:
@@ -73,13 +83,11 @@ export function useCollaboration(sessionId, userId, onCodeUpdate) {
             console.log('WebSocket disconnected');
             setConnected(false);
             
-            // Clear ping interval
             if (pingTimerRef.current) {
                 clearInterval(pingTimerRef.current);
                 pingTimerRef.current = null;
             }
 
-            // Attempt reconnection
             reconnectTimerRef.current = setTimeout(() => {
                 console.log('Attempting to reconnect...');
                 connect();
@@ -89,13 +97,12 @@ export function useCollaboration(sessionId, userId, onCodeUpdate) {
         ws.onerror = (error) => {
             console.error('WebSocket error:', error);
         };
-    }, [sessionId, userId, onCodeUpdate]);
+    }, [sessionId, userId, onCodeUpdate, onExecutionResult, onExecutionStarted]);
 
     useEffect(() => {
         connect();
 
         return () => {
-            // Cleanup
             if (wsRef.current) {
                 wsRef.current.close();
             }
@@ -117,5 +124,15 @@ export function useCollaboration(sessionId, userId, onCodeUpdate) {
         }
     };
 
-    return { connected, users, sendCodeChange };
+    const executeCode = (language, code) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({
+                type: 'execute_code',
+                language,
+                code
+            }));
+        }
+    };
+
+    return { connected, users, sendCodeChange, executeCode };
 }
