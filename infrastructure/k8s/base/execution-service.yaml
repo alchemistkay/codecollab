@@ -1,0 +1,73 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execution-service
+  namespace: codecollab
+  labels:
+    app: execution-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: execution-service
+  template:
+    metadata:
+      labels:
+        app: execution-service
+    spec:
+      containers:
+      - name: execution-service
+        image: ghcr.io/alchemistkay/codecollab/execution-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8002
+          name: http
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: codecollab-config
+              key: EXECUTION_PORT
+        - name: GIN_MODE
+          value: "release"
+        volumeMounts:
+        - name: docker-sock
+          mountPath: /var/run/docker.sock
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8002
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "1000m"
+      volumes:
+      - name: docker-sock
+        hostPath:
+          path: /var/run/docker.sock
+          type: Socket
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: execution-service
+  namespace: codecollab
+spec:
+  selector:
+    app: execution-service
+  ports:
+  - port: 8002
+    targetPort: 8002
+    name: http
+  type: ClusterIP

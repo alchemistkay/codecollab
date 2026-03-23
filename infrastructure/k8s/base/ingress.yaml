@@ -1,0 +1,49 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: codecollab-ingress
+  namespace: codecollab
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+spec:
+  tls:
+  - hosts:
+    - codecollab.k4scloud.com
+    secretName: codecollab-tls
+  rules:
+  - host: codecollab.k4scloud.com
+    http:
+      paths:
+      # Session API (strip /api prefix)
+      - path: /api/sessions
+        pathType: Prefix
+        backend:
+          service:
+            name: session-service
+            port:
+              number: 8001
+      # Execution API (strip /api prefix)
+      - path: /api/execute
+        pathType: Prefix
+        backend:
+          service:
+            name: execution-service
+            port:
+              number: 8002
+      # Collaboration WebSocket
+      - path: /ws
+        pathType: Prefix
+        backend:
+          service:
+            name: collaboration-service
+            port:
+              number: 8003
+      # Frontend
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend
+            port:
+              number: 80

@@ -1,0 +1,77 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: session-service
+  namespace: codecollab
+  labels:
+    app: session-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: session-service
+  template:
+    metadata:
+      labels:
+        app: session-service
+    spec:
+      containers:
+      - name: session-service
+        image: ghcr.io/alchemistkay/codecollab/session-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8001
+          name: http
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: codecollab-config
+              key: SESSION_PORT
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: codecollab-secrets
+              key: database-url
+        - name: CORS_ORIGINS
+          valueFrom:
+            configMapKeyRef:
+              name: codecollab-config
+              key: CORS_ORIGINS
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8001
+          initialDelaySeconds: 15
+          periodSeconds: 5
+          timeoutSeconds: 5
+          failureThreshold: 3
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: session-service
+  namespace: codecollab
+spec:
+  selector:
+    app: session-service
+  ports:
+  - port: 8001
+    targetPort: 8001
+    name: http
+  type: ClusterIP
