@@ -1,0 +1,14 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: codecollab-config
+  namespace: codecollab
+data:
+  SESSION_PORT: "8001"
+  EXECUTION_PORT: "8002"
+  COLLABORATION_PORT: "8003"
+  POSTGRES_HOST: "postgres"
+  POSTGRES_PORT: "5432"
+  POSTGRES_DB: "codecollab"
+  CORS_ORIGINS: "https://codecollab.k4scloud.com"
+  EXECUTION_API: "http://execution-service:8002"

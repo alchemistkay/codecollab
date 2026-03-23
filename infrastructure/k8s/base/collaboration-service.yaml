@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: collaboration-service
+  namespace: codecollab
+  labels:
+    app: collaboration-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: collaboration-service
+  template:
+    metadata:
+      labels:
+        app: collaboration-service
+    spec:
+      containers:
+      - name: collaboration-service
+        image: ghcr.io/alchemistkay/codecollab/collaboration-service:latest
+        imagePullPolicy: IfNotPresent
+        ports:
+        - containerPort: 8003
+          name: http
+        env:
+        - name: PORT
+          valueFrom:
+            configMapKeyRef:
+              name: codecollab-config
+              key: COLLABORATION_PORT
+        - name: NODE_ENV
+          value: "production"
+        - name: EXECUTION_API
+          valueFrom:
+            configMapKeyRef:
+              name: codecollab-config
+              key: EXECUTION_API
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8003
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "500m"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: collaboration-service
+  namespace: codecollab
+spec:
+  selector:
+    app: collaboration-service
+  ports:
+  - port: 8003
+    targetPort: 8003
+    name: http
+  type: ClusterIP
