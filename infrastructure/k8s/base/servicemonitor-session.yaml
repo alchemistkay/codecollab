@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: session-service-monitor
+  namespace: codecollab
+  labels:
+    app: session-service
+spec:
+  selector:
+    matchLabels:
+      app: session-service
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics

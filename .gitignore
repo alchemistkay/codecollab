@@ -70,3 +70,8 @@ coverage/
 
 # Docker
 docker-compose.override.yml
+
+# Kubernetes monitoring downloads
+infrastructure/k8s/monitoring/kube-prometheus-*/
+infrastructure/k8s/monitoring/*.tar.gz
+infrastructure/k8s/monitoring/*.zip
