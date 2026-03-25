@@ -1,0 +1,9 @@
+# Ignore downloaded kube-prometheus
+kube-prometheus-*/
+*.tar.gz
+*.zip
+
+# Keep only our custom manifests
+!*.yaml
+!*.yml
+!README.md
