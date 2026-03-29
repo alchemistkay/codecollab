@@ -2,6 +2,8 @@
 
 Real-Time Collaborative Code Execution Platform
 
+![CodeCollab Banner](docs/img/codecollab-banner.png)
+
 ![CodeCollab](https://img.shields.io/badge/status-production-success)
 ![License](https://img.shields.io/badge/license-MIT-blue)
 
