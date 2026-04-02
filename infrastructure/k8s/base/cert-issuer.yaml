@@ -5,7 +5,7 @@ metadata:
 spec:
   acme:
     server: https://acme-v02.api.letsencrypt.org/directory
-    email: alchemistkay@k4scloud.com
+    email: alchemistkay@k4scloud.com  # Update to your ACME notification email before applying
     privateKeySecretRef:
       name: letsencrypt-prod
     solvers:

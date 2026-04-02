@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: execution-service-monitor
+  namespace: codecollab
+  labels:
+    app: execution-service
+spec:
+  selector:
+    matchLabels:
+      app: execution-service
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics

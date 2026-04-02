@@ -54,17 +54,3 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "500m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: collaboration-service
-  namespace: codecollab
-spec:
-  selector:
-    app: collaboration-service
-  ports:
-  - port: 8003
-    targetPort: 8003
-    name: http
-  type: ClusterIP

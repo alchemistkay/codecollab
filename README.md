@@ -79,7 +79,7 @@ git clone https://github.com/alchemistkay/codecollab.git
 cd codecollab
 
 # Start all services
-cd infrastructure/docker-compose
+cd infrastructure/local
 ./start.sh
 
 # Access application
@@ -133,7 +133,7 @@ codecollab/
 │   └── collaboration-service/ # Node.js
 ├── frontend/                   # React
 └── infrastructure/
-    ├── docker-compose/        # Local development
+    ├── local/                  # Local development
     └── production/            # Production deployment
 ```
 

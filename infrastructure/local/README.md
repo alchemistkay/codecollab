@@ -16,7 +16,7 @@ docker exec -it postgres psql -U postgres
 ```
 ```sql
 CREATE DATABASE codecollab;
-CREATE USER codecollab WITH PASSWORD 'codecollab_secure_pass';
+CREATE USER codecollab WITH PASSWORD '<your_password>';
 GRANT ALL PRIVILEGES ON DATABASE codecollab TO codecollab;
 \c codecollab
 GRANT ALL ON SCHEMA public TO codecollab;
@@ -84,7 +84,7 @@ docker-compose up --build -d
 
 Edit `.env`:
 ```
-POSTGRES_PASSWORD=codecollab_secure_pass
+POSTGRES_PASSWORD=<your_password>
 ```
 
 ## Development

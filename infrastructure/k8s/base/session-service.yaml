@@ -61,17 +61,3 @@ spec:
           limits:
             memory: "256Mi"
             cpu: "500m"
----
-apiVersion: v1
-kind: Service
-metadata:
-  name: session-service
-  namespace: codecollab
-spec:
-  selector:
-    app: session-service
-  ports:
-  - port: 8001
-    targetPort: 8001
-    name: http
-  type: ClusterIP
