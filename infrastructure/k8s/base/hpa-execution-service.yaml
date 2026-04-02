@@ -16,7 +16,13 @@ spec:
       name: cpu
       target:
         type: Utilization
-        averageUtilization: 60
+        averageUtilization: 60  # Lower than other services — execution is CPU-intensive
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30
@@ -24,3 +30,10 @@ spec:
       - type: Pods
         value: 4
         periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Pods
+        value: 1
+        periodSeconds: 120
+      selectPolicy: Min

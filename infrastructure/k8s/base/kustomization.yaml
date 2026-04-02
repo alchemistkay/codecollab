@@ -1,0 +1,26 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - configmap.yaml
+  - secret.yaml
+  - postgres-external.yaml
+  - session-service.yaml
+  - execution-service.yaml
+  - collaboration-service.yaml
+  - frontend.yaml
+  - services-nodeport.yaml
+  - ingress.yaml
+  - cert-issuer.yaml
+  - resourcequota.yaml
+  - limitrange.yaml
+  - hpa-session-service.yaml
+  - hpa-execution-service.yaml
+  - hpa-collaboration-service.yaml
+  - pdb-session-service.yaml
+  - pdb-execution-service.yaml
+  - pdb-collaboration-service.yaml
+  - servicemonitor-session.yaml
+  - servicemonitor-execution.yaml
+  - servicemonitor-collaboration.yaml

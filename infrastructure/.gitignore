@@ -1,0 +1,7 @@
+# Real .env files contain secrets — never commit them
+.env
+**/.env
+
+# .env.example files are safe to commit
+!.env.example
+!**/.env.example

@@ -1,0 +1,15 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: collaboration-service-monitor
+  namespace: codecollab
+  labels:
+    app: collaboration-service
+spec:
+  selector:
+    matchLabels:
+      app: collaboration-service
+  endpoints:
+  - port: http
+    interval: 30s
+    path: /metrics
