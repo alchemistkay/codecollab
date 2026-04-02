@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { Routes, Route, useNavigate, useParams } from 'react-router-dom';
 import CodeEditor from './components/CodeEditor';
 import OutputPanel from './components/OutputPanel';
 import LandingPage from './components/LandingPage';
 import { sessionAPI } from './services/api';
 import { useCollaboration } from './hooks/useCollaboration';
-import { Play, Users, Copy, Check, Code2, ChevronDown, X, Link, Share2 } from 'lucide-react';
+import { Play, Users, Copy, Check, Code2, ChevronDown, X, Link, Share2, Download } from 'lucide-react';
 
 // ─── Design tokens ────────────────────────────────────────────────────────────
 const C = {
@@ -22,20 +23,77 @@ const C = {
   text2:       '#f5f5f5',
 };
 
+const CURSOR_COLORS = ['#60a5fa', '#f472b6', '#fb923c', '#a78bfa', '#34d399'];
+
 const generateUserId = () => 'user_' + Math.random().toString(36).substr(2, 9);
+
+// ─── Share Modal helpers ──────────────────────────────────────────────────────
+function LinkRow({ label, link, copied, onCopy, primary }) {
+  return (
+    <div style={{ marginBottom: primary ? '12px' : '0' }}>
+      <div style={{ fontSize: '12px', fontWeight: 500, color: C.muted, marginBottom: '8px', letterSpacing: '0.01em' }}>
+        {label}
+      </div>
+      <div style={{ display: 'flex', gap: '8px', alignItems: 'stretch' }}>
+        <div style={{
+          flex: 1,
+          display: 'flex', alignItems: 'center', gap: '8px',
+          padding: '10px 12px',
+          backgroundColor: C.elevated,
+          border: `1px solid ${C.border}`,
+          borderRadius: '8px',
+          overflow: 'hidden',
+        }}>
+          <Link size={13} color={C.muted} style={{ flexShrink: 0 }} />
+          <span style={{
+            fontSize: '12.5px',
+            fontFamily: '"JetBrains Mono", monospace',
+            color: C.text2,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            letterSpacing: '0',
+          }}>
+            {link}
+          </span>
+        </div>
+        <button
+          onClick={onCopy}
+          style={{
+            flexShrink: 0,
+            padding: '10px 16px',
+            backgroundColor: primary ? (copied ? C.greenDim : C.green) : C.secondary,
+            color: primary ? (copied ? C.green : C.bg) : (copied ? C.green : C.muted),
+            border: `1px solid ${copied ? C.greenBorder : (primary ? 'transparent' : C.border)}`,
+            borderRadius: '8px',
+            fontSize: '13px', fontWeight: 600,
+            cursor: 'pointer',
+            display: 'flex', alignItems: 'center', gap: '6px',
+            transition: 'all 0.2s',
+            letterSpacing: '-0.01em',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {copied ? <><Check size={13} />Copied!</> : <><Copy size={13} />Copy</>}
+        </button>
+      </div>
+    </div>
+  );
+}
 
 // ─── Share Modal ──────────────────────────────────────────────────────────────
 function ShareModal({ sessionId, onClose }) {
-  const [copied, setCopied] = useState(false);
-  const link = `${window.location.origin}?session=${sessionId}`;
+  const [copiedEdit, setCopiedEdit] = useState(false);
+  const [copiedView, setCopiedView] = useState(false);
+  const editLink = `${window.location.origin}/s/${sessionId}`;
+  const viewLink = `${window.location.origin}/s/${sessionId}/view`;
 
-  const handleCopy = async () => {
+  const copyLink = async (text, setFlag) => {
     try {
-      await navigator.clipboard.writeText(link);
+      await navigator.clipboard.writeText(text);
     } catch {
-      // fallback for environments where clipboard API is restricted
       const el = document.createElement('textarea');
-      el.value = link;
+      el.value = text;
       el.style.position = 'fixed';
       el.style.opacity = '0';
       document.body.appendChild(el);
@@ -43,11 +101,10 @@ function ShareModal({ sessionId, onClose }) {
       document.execCommand('copy');
       document.body.removeChild(el);
     }
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2500);
+    setFlag(true);
+    setTimeout(() => setFlag(false), 2500);
   };
 
-  // Close on Escape
   useEffect(() => {
     const handler = (e) => { if (e.key === 'Escape') onClose(); };
     window.addEventListener('keydown', handler);
@@ -55,7 +112,6 @@ function ShareModal({ sessionId, onClose }) {
   }, [onClose]);
 
   return (
-    // Backdrop
     <div
       onClick={onClose}
       style={{
@@ -66,7 +122,6 @@ function ShareModal({ sessionId, onClose }) {
         padding: '16px',
       }}
     >
-      {/* Card — stop click propagation so backdrop click doesn't close via card */}
       <div
         onClick={e => e.stopPropagation()}
         style={{
@@ -79,7 +134,6 @@ function ShareModal({ sessionId, onClose }) {
           position: 'relative',
         }}
       >
-        {/* Close button */}
         <button
           onClick={onClose}
           style={{
@@ -98,7 +152,6 @@ function ShareModal({ sessionId, onClose }) {
           <X size={14} />
         </button>
 
-        {/* Icon + heading */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px' }}>
           <div style={{
             width: '38px', height: '38px',
@@ -115,73 +168,31 @@ function ShareModal({ sessionId, onClose }) {
               Share this session
             </h2>
             <p style={{ fontSize: '13px', color: C.muted, marginTop: '2px' }}>
-              Anyone with this link can join and collaborate in real time.
+              Share an edit link or a view-only link.
             </p>
           </div>
         </div>
 
-        {/* Divider */}
         <div style={{ height: '1px', backgroundColor: C.border, margin: '20px 0' }} />
 
-        {/* Link label */}
-        <div style={{ fontSize: '12px', fontWeight: 500, color: C.muted, marginBottom: '8px', letterSpacing: '0.01em' }}>
-          SESSION LINK
-        </div>
+        <LinkRow
+          label="EDIT LINK — full collaboration"
+          link={editLink}
+          copied={copiedEdit}
+          onCopy={() => copyLink(editLink, setCopiedEdit)}
+          primary
+        />
 
-        {/* Link input + copy button */}
-        <div style={{
-          display: 'flex', gap: '8px', alignItems: 'stretch',
-        }}>
-          {/* Link display */}
-          <div style={{
-            flex: 1,
-            display: 'flex', alignItems: 'center', gap: '8px',
-            padding: '10px 12px',
-            backgroundColor: C.elevated,
-            border: `1px solid ${C.border}`,
-            borderRadius: '8px',
-            overflow: 'hidden',
-          }}>
-            <Link size={13} color={C.muted} style={{ flexShrink: 0 }} />
-            <span style={{
-              fontSize: '12.5px',
-              fontFamily: '"JetBrains Mono", monospace',
-              color: C.text2,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              letterSpacing: '0',
-            }}>
-              {link}
-            </span>
-          </div>
+        <div style={{ height: '1px', backgroundColor: C.border, margin: '12px 0' }} />
 
-          {/* Copy button */}
-          <button
-            onClick={handleCopy}
-            style={{
-              flexShrink: 0,
-              padding: '10px 16px',
-              backgroundColor: copied ? C.greenDim : C.green,
-              color: copied ? C.green : C.bg,
-              border: `1px solid ${copied ? C.greenBorder : 'transparent'}`,
-              borderRadius: '8px',
-              fontSize: '13px', fontWeight: 600,
-              cursor: 'pointer',
-              display: 'flex', alignItems: 'center', gap: '6px',
-              transition: 'all 0.2s',
-              letterSpacing: '-0.01em',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {copied
-              ? <><Check size={13} />Copied!</>
-              : <><Copy size={13} />Copy Link</>
-            }
-          </button>
-        </div>
+        <LinkRow
+          label="VIEW LINK — read only"
+          link={viewLink}
+          copied={copiedView}
+          onCopy={() => copyLink(viewLink, setCopiedView)}
+          primary={false}
+        />
 
-        {/* Footer hint */}
         <p style={{
           marginTop: '16px', fontSize: '12px', color: C.muted,
           display: 'flex', alignItems: 'center', gap: '5px',
@@ -194,16 +205,72 @@ function ShareModal({ sessionId, onClose }) {
   );
 }
 
-// ─── App ──────────────────────────────────────────────────────────────────────
-function App() {
-  const [view, setView] = useState(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    return urlParams.get('session') ? 'editor' : 'landing';
-  });
+// ─── Landing route ────────────────────────────────────────────────────────────
+function LandingRoute() {
+  const navigate = useNavigate();
+
+  const handleStartCoding = async () => {
+    try {
+      const session = await sessionAPI.create('Untitled Session', 'python');
+      navigate(`/s/${session.id}`);
+    } catch (e) {
+      console.error('Failed to create session:', e);
+    }
+  };
+
+  return <LandingPage onStart={handleStartCoding} />;
+}
+
+// ─── Expired view ─────────────────────────────────────────────────────────────
+function ExpiredView() {
+  const navigate = useNavigate();
+  return (
+    <div style={{
+      height: '100vh', display: 'flex', flexDirection: 'column',
+      alignItems: 'center', justifyContent: 'center',
+      backgroundColor: C.bg, color: C.text,
+      gap: '16px', padding: '24px', textAlign: 'center',
+    }}>
+      <div style={{
+        width: '48px', height: '48px',
+        backgroundColor: C.secondary,
+        border: `1px solid ${C.border}`,
+        borderRadius: '12px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '22px',
+      }}>⏳</div>
+      <div>
+        <h2 style={{ fontSize: '18px', fontWeight: 700, letterSpacing: '-0.03em', marginBottom: '6px' }}>
+          Session expired
+        </h2>
+        <p style={{ fontSize: '14px', color: C.muted }}>
+          This session hasn't been active for 7 days and has expired.
+        </p>
+      </div>
+      <button
+        onClick={() => navigate('/')}
+        style={{
+          padding: '8px 20px',
+          backgroundColor: C.green, color: C.bg,
+          border: 'none', borderRadius: '8px',
+          fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+        }}
+      >
+        Start a new session
+      </button>
+    </div>
+  );
+}
+
+// ─── Editor route ─────────────────────────────────────────────────────────────
+function EditorRoute({ readOnly = false }) {
+  const { sessionId: urlSessionId } = useParams();
+  const navigate = useNavigate();
+  const userId = useRef(generateUserId()).current;
+
   const [sessionId, setSessionId] = useState(null);
-  const userIdRef = useRef(generateUserId());
-  const userId = userIdRef.current;
-  const [code, setCode] = useState('print("Hello, CodeCollab!")');
+  const [loadState, setLoadState] = useState('loading'); // 'loading' | 'ready' | 'expired' | 'error'
+  const [code, setCode] = useState('');
   const [language, setLanguage] = useState('python');
   const [output, setOutput] = useState('');
   const [error, setError] = useState('');
@@ -211,6 +278,8 @@ function App() {
   const [duration, setDuration] = useState(null);
   const [executing, setExecuting] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
+  const [remoteCursors, setRemoteCursors] = useState({});
+  const userColorMap = useRef({});
 
   const handleCodeUpdate = useCallback((newCode) => setCode(newCode), []);
 
@@ -220,7 +289,6 @@ function App() {
     setExitCode(result.exit_code);
     setDuration(result.duration_ms);
     setExecuting(false);
-    setExecutingUser(null);
   }, []);
 
   const handleExecutionStarted = useCallback(() => {
@@ -231,18 +299,32 @@ function App() {
     setDuration(null);
   }, []);
 
-  const { connected, users, sendCodeChange, executeCode } = useCollaboration(
-    sessionId, userId, handleCodeUpdate, handleExecutionResult, handleExecutionStarted
-  );
+  const handleLanguageUpdate = useCallback((lang) => {
+    setLanguage(lang);
+  }, []);
+
+  const handleCursorUpdate = useCallback((uid, position) => {
+    if (!position) {
+      setRemoteCursors(prev => { const next = { ...prev }; delete next[uid]; return next; });
+      return;
+    }
+    const color = (userColorMap.current[uid] ??=
+      CURSOR_COLORS[Object.keys(userColorMap.current).length % CURSOR_COLORS.length]);
+    setRemoteCursors(prev => ({ ...prev, [uid]: { ...position, color } }));
+  }, []);
+
+  const { connected, users, sendCodeChange, executeCode, sendLanguageChange, sendCursorPosition } =
+    useCollaboration(
+      sessionId, userId,
+      handleCodeUpdate, handleExecutionResult, handleExecutionStarted,
+      handleLanguageUpdate, handleCursorUpdate
+    );
 
   useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const urlSessionId = urlParams.get('session');
     if (urlSessionId) {
       loadSession(urlSessionId);
-      setView('editor');
     }
-  }, []);
+  }, [urlSessionId]);
 
   const loadSession = async (sid) => {
     try {
@@ -250,24 +332,14 @@ function App() {
       setSessionId(session.id);
       setCode(session.code || 'print("Hello, CodeCollab!")');
       setLanguage(session.language);
-    } catch {
-      createNewSession();
-    }
-  };
-
-  const createNewSession = async () => {
-    try {
-      const session = await sessionAPI.create('Untitled Session', language);
-      setSessionId(session.id);
-      window.history.pushState({}, '', `?session=${session.id}`);
+      setLoadState('ready');
     } catch (e) {
-      console.error('Failed to create session:', e);
+      if (e.response?.status === 410) {
+        setLoadState('expired');
+      } else {
+        setLoadState('error');
+      }
     }
-  };
-
-  const handleStartCoding = () => {
-    setView('editor');
-    createNewSession();
   };
 
   const handleCodeChange = (newCode) => {
@@ -276,18 +348,65 @@ function App() {
   };
 
   const handleRunCode = () => {
-    if (connected) {
+    if (connected && !readOnly) {
       setExecuting(true);
       executeCode(language, code);
     }
   };
 
-  // ── Landing page ─────────────────────────────────────────────────────────────
-  if (view === 'landing') {
-    return <LandingPage onStart={handleStartCoding} />;
+  const handleLanguageChange = (val) => {
+    setLanguage(val);
+    if (connected) sendLanguageChange(val);
+  };
+
+  const handleDownload = () => {
+    const ext = language === 'python' ? 'py' : 'js';
+    const blob = new Blob([code], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `codecollab.${ext}`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  if (loadState === 'loading') {
+    return (
+      <div style={{
+        height: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: C.bg, color: C.muted, fontSize: '13px',
+      }}>
+        Loading session…
+      </div>
+    );
   }
 
-  // ── Editor view ──────────────────────────────────────────────────────────────
+  if (loadState === 'expired') return <ExpiredView />;
+
+  if (loadState === 'error') {
+    return (
+      <div style={{
+        height: '100vh', display: 'flex', flexDirection: 'column',
+        alignItems: 'center', justifyContent: 'center',
+        backgroundColor: C.bg, color: C.muted, fontSize: '13px', gap: '12px',
+      }}>
+        <span>Session not found.</span>
+        <button
+          onClick={() => navigate('/')}
+          style={{
+            padding: '6px 16px', backgroundColor: C.secondary, color: C.text2,
+            border: `1px solid ${C.border}`, borderRadius: '7px',
+            fontSize: '13px', cursor: 'pointer',
+          }}
+        >
+          Go home
+        </button>
+      </div>
+    );
+  }
+
+  const runDisabled = executing || !connected || readOnly;
+
   return (
     <div style={{
       height: '100vh',
@@ -295,7 +414,6 @@ function App() {
       backgroundColor: C.bg, color: C.text,
       overflow: 'hidden',
     }}>
-      {/* Share modal */}
       {shareOpen && sessionId && (
         <ShareModal sessionId={sessionId} onClose={() => setShareOpen(false)} />
       )}
@@ -309,9 +427,8 @@ function App() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: '16px',
       }}>
-        {/* Left: logo only */}
         <button
-          onClick={() => setView('landing')}
+          onClick={() => navigate('/')}
           style={{
             display: 'flex', alignItems: 'center', gap: '8px',
             background: 'none', border: 'none', cursor: 'pointer',
@@ -328,7 +445,6 @@ function App() {
           <span style={{ fontWeight: 700, fontSize: '14px', letterSpacing: '-0.03em' }}>CodeCollab</span>
         </button>
 
-        {/* Right: controls */}
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
           {/* Share */}
           {sessionId && (
@@ -357,12 +473,13 @@ function App() {
           <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
             <select
               value={language}
-              onChange={(e) => setLanguage(e.target.value)}
+              onChange={(e) => handleLanguageChange(e.target.value)}
+              disabled={readOnly}
               style={{
                 padding: '5px 28px 5px 10px',
-                backgroundColor: C.secondary, color: C.text2,
+                backgroundColor: C.secondary, color: readOnly ? C.muted : C.text2,
                 border: `1px solid ${C.border}`,
-                borderRadius: '7px', cursor: 'pointer',
+                borderRadius: '7px', cursor: readOnly ? 'not-allowed' : 'pointer',
                 fontSize: '13px', fontWeight: 500,
                 appearance: 'none', outline: 'none',
               }}
@@ -373,23 +490,43 @@ function App() {
             <ChevronDown size={12} color={C.muted} style={{ position: 'absolute', right: '8px', pointerEvents: 'none' }} />
           </div>
 
+          {/* Download */}
+          <button
+            onClick={handleDownload}
+            title="Download code"
+            style={{
+              padding: '5px 10px',
+              backgroundColor: 'transparent',
+              color: C.muted,
+              border: `1px solid ${C.border}`,
+              borderRadius: '7px',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center',
+              transition: 'color 0.15s, border-color 0.15s',
+            }}
+            onMouseEnter={e => { e.currentTarget.style.color = C.text2; e.currentTarget.style.borderColor = C.borderStrong; }}
+            onMouseLeave={e => { e.currentTarget.style.color = C.muted; e.currentTarget.style.borderColor = C.border; }}
+          >
+            <Download size={13} />
+          </button>
+
           {/* Run */}
           <button
             onClick={handleRunCode}
-            disabled={executing || !connected}
+            disabled={runDisabled}
             style={{
               padding: '6px 14px',
               backgroundColor: C.secondary,
-              color: executing || !connected ? C.muted : C.green,
-              border: `1px solid ${executing || !connected ? C.border : C.greenBorder}`,
+              color: runDisabled ? C.muted : C.green,
+              border: `1px solid ${runDisabled ? C.border : C.greenBorder}`,
               borderRadius: '7px',
-              cursor: executing || !connected ? 'not-allowed' : 'pointer',
+              cursor: runDisabled ? 'not-allowed' : 'pointer',
               display: 'flex', alignItems: 'center', gap: '6px',
               fontSize: '13px', fontWeight: 600,
               transition: 'all 0.2s',
             }}
           >
-            <Play size={13} fill={executing || !connected ? C.muted : C.green} strokeWidth={0} />
+            <Play size={13} fill={runDisabled ? C.muted : C.green} strokeWidth={0} />
             {executing ? 'Running…' : 'Run'}
           </button>
 
@@ -428,7 +565,14 @@ function App() {
             </span>
           </div>
           <div style={{ flex: 1, overflow: 'hidden' }}>
-            <CodeEditor value={code} onChange={handleCodeChange} language={language} />
+            <CodeEditor
+              value={code}
+              onChange={handleCodeChange}
+              language={language}
+              readOnly={readOnly}
+              remoteCursors={remoteCursors}
+              onCursorPositionChange={sendCursorPosition}
+            />
           </div>
         </div>
 
@@ -470,9 +614,7 @@ function App() {
         display: 'flex', alignItems: 'center', justifyContent: 'space-between',
         gap: '12px',
       }}>
-        {/* Left: connection status + session ID */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-          {/* Dot with ping animation when connected */}
           <div style={{ position: 'relative', width: '8px', height: '8px', flexShrink: 0 }}>
             {connected && (
               <div className="animate-ping" style={{
@@ -499,14 +641,38 @@ function App() {
               </span>
             </>
           )}
+          {readOnly && (
+            <>
+              <div style={{ width: '1px', height: '12px', backgroundColor: C.border }} />
+              <span style={{
+                fontSize: '11px', color: C.muted,
+                padding: '1px 6px',
+                border: `1px solid ${C.border}`,
+                borderRadius: '4px',
+                letterSpacing: '0.02em',
+              }}>
+                Viewing — read only
+              </span>
+            </>
+          )}
         </div>
 
-        {/* Right: user ID */}
         <span style={{ fontSize: '11px', color: C.muted, fontFamily: '"JetBrains Mono", monospace' }}>
           uid: {userId}
         </span>
       </div>
     </div>
+  );
+}
+
+// ─── App (router) ─────────────────────────────────────────────────────────────
+function App() {
+  return (
+    <Routes>
+      <Route path="/" element={<LandingRoute />} />
+      <Route path="/s/:sessionId" element={<EditorRoute />} />
+      <Route path="/s/:sessionId/view" element={<EditorRoute readOnly />} />
+    </Routes>
   );
 }
 

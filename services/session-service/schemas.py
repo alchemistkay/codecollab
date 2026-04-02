@@ -6,7 +6,7 @@ class SessionCreate(BaseModel):
     title: str = Field(..., min_length=1, max_length=255, description="Session title")
     language: str = Field(default="python", description="Programming language")
     code: Optional[str] = Field(default="", description="Initial code")
-    
+
     @validator('language')
     def validate_language(cls, v):
         allowed = ['python', 'javascript', 'go', 'rust']
@@ -16,6 +16,7 @@ class SessionCreate(BaseModel):
 
 class SessionUpdate(BaseModel):
     title: Optional[str] = Field(None, min_length=1, max_length=255)
+    language: Optional[str] = None
     code: Optional[str] = None
     is_active: Optional[bool] = None
 
@@ -27,6 +28,7 @@ class SessionResponse(BaseModel):
     created_at: datetime
     updated_at: datetime
     is_active: bool
-    
+    expires_at: Optional[datetime] = None
+
     class Config:
         from_attributes = True
