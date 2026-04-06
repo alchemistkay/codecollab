@@ -1,0 +1,300 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ─────────────────────────────────────────────────────────────
+  # SECRETS DETECTION — block immediately if credentials leak
+  # ─────────────────────────────────────────────────────────────
+  detect-secrets:
+    name: Secret Detection (Gitleaks)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # full history so gitleaks can scan all commits
+
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # ─────────────────────────────────────────────────────────────
+  # CODE QUALITY — lint all four services in parallel
+  # ─────────────────────────────────────────────────────────────
+  lint-frontend:
+    name: Lint — Frontend (ESLint)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Run ESLint
+        run: npm run lint
+        working-directory: frontend
+
+  lint-session-service:
+    name: Lint — Session Service (ruff)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-ruff-${{ runner.os }}
+          restore-keys: pip-ruff-
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff
+        run: ruff check services/session-service/
+
+  lint-execution-service:
+    name: Lint — Execution Service (gofmt + go vet)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache-dependency-path: services/execution-service/go.sum
+
+      - name: Check formatting (gofmt)
+        run: |
+          unformatted=$(gofmt -l ./...)
+          if [ -n "$unformatted" ]; then
+            echo "The following files are not gofmt-compliant:"
+            echo "$unformatted"
+            exit 1
+          fi
+        working-directory: services/execution-service
+
+      - name: Run go vet
+        run: go vet ./...
+        working-directory: services/execution-service
+
+  lint-collaboration-service:
+    name: Lint — Collaboration Service (node syntax)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: services/collaboration-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: services/collaboration-service
+
+      - name: Check syntax
+        # xargs propagates non-zero exit from node --check, find -exec does not
+        run: find src -name "*.js" -print0 | xargs -0 -n1 node --check
+        working-directory: services/collaboration-service
+
+  # ─────────────────────────────────────────────────────────────
+  # SAST — static application security testing via CodeQL
+  # Results appear in GitHub Security → Code Scanning
+  # ─────────────────────────────────────────────────────────────
+  sast:
+    name: SAST (CodeQL)
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+    strategy:
+      fail-fast: false
+      matrix:
+        language: [python, go, javascript]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: ${{ matrix.language }}
+          queries: security-extended # includes high + medium severity queries
+
+      - name: Autobuild
+        uses: github/codeql-action/autobuild@v3
+
+      - name: Perform CodeQL analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:${{ matrix.language }}
+
+  # ─────────────────────────────────────────────────────────────
+  # SCA — software composition analysis (dependency CVE scanning)
+  # ─────────────────────────────────────────────────────────────
+  sca-frontend:
+    name: SCA — Frontend (npm audit)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: frontend
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        working-directory: frontend
+
+  sca-collaboration-service:
+    name: SCA — Collaboration Service (npm audit)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "18"
+          cache: npm
+          cache-dependency-path: services/collaboration-service/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: services/collaboration-service
+
+      - name: Audit dependencies
+        run: npm audit --audit-level=high
+        working-directory: services/collaboration-service
+
+  sca-session-service:
+    name: SCA — Session Service (pip-audit)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: pip-audit-${{ runner.os }}-${{ hashFiles('services/session-service/requirements.txt') }}
+          restore-keys: pip-audit-${{ runner.os }}-
+
+      - name: Install pip-audit
+        run: pip install pip-audit
+
+      - name: Audit dependencies
+        run: pip-audit -r requirements.txt
+        working-directory: services/session-service
+
+  sca-execution-service:
+    name: SCA — Execution Service (govulncheck)
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: "1.21"
+          cache-dependency-path: services/execution-service/go.sum
+
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+
+      - name: Check for known vulnerabilities
+        run: govulncheck ./...
+        working-directory: services/execution-service
+
+  # ─────────────────────────────────────────────────────────────
+  # BUILD VALIDATION — final gate: confirm all images build
+  # Only runs after every lint + SAST + SCA job passes
+  # ─────────────────────────────────────────────────────────────
+  build-validation:
+    name: Build — ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    needs:
+      - detect-secrets
+      - lint-frontend
+      - lint-session-service
+      - lint-execution-service
+      - lint-collaboration-service
+      - sast
+      - sca-frontend
+      - sca-collaboration-service
+      - sca-session-service
+      - sca-execution-service
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: frontend
+            context: ./frontend
+          - service: session-service
+            context: ./services/session-service
+          - service: execution-service
+            context: ./services/execution-service
+          - service: collaboration-service
+            context: ./services/collaboration-service
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Build image (no push)
+        uses: docker/build-push-action@v5
+        with:
+          context: ${{ matrix.context }}
+          push: false
+          tags: codecollab/${{ matrix.service }}:ci-${{ github.sha }}
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
