@@ -3,6 +3,29 @@ import axios from 'axios';
 
 const PING_INTERVAL = 30000;
 const EXECUTION_API = process.env.EXECUTION_API || 'http://execution-service:8002';
+const SESSION_SERVICE_URL = process.env.SESSION_SERVICE_URL || 'http://session-service:8001';
+
+const persistTimers = new Map();
+
+function schedulePersist(sessionId) {
+    if (persistTimers.has(sessionId)) {
+        clearTimeout(persistTimers.get(sessionId));
+    }
+    persistTimers.set(sessionId, setTimeout(async () => {
+        persistTimers.delete(sessionId);
+        const session = sessionStore.getSession(sessionId);
+        if (!session) return;
+        try {
+            await fetch(`${SESSION_SERVICE_URL}/sessions/${sessionId}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ code: session.code, language: session.language }),
+            });
+        } catch (e) {
+            console.error('Failed to persist session:', sessionId, e.message);
+        }
+    }, 3000));
+}
 
 export function handleWebSocket(ws, req) {
     const url = new URL(req.url, 'ws://localhost');
@@ -76,10 +99,10 @@ async function handleMessage(sessionId, userId, message, ws) {
                 code: message.code,
                 userId
             }, userId);
+            schedulePersist(sessionId);
             break;
 
         case 'execute_code':
-            // Execute code and broadcast result to all users
             await handleExecuteCode(sessionId, userId, message);
             break;
 
@@ -91,7 +114,7 @@ async function handleMessage(sessionId, userId, message, ws) {
             }, userId);
             break;
 
-        case 'language_change':
+        case 'language_change': {
             const session = sessionStore.getSession(sessionId);
             if (session) {
                 session.language = message.language;
@@ -99,9 +122,11 @@ async function handleMessage(sessionId, userId, message, ws) {
                     type: 'language_update',
                     language: message.language,
                     userId
-                });
+                }, userId);
+                schedulePersist(sessionId);
             }
             break;
+        }
 
         case 'ping':
             ws.send(JSON.stringify({ type: 'pong' }));
@@ -114,20 +139,17 @@ async function handleMessage(sessionId, userId, message, ws) {
 
 async function handleExecuteCode(sessionId, userId, message) {
     try {
-        // Broadcast that execution started
         broadcast(sessionId, {
             type: 'execution_started',
             userId
         });
 
-        // Call execution service
         const response = await axios.post(`${EXECUTION_API}/execute`, {
             session_id: sessionId,
             language: message.language,
             code: message.code
         });
 
-        // Broadcast result to all users
         broadcast(sessionId, {
             type: 'execution_result',
             result: response.data,
@@ -136,8 +158,7 @@ async function handleExecuteCode(sessionId, userId, message) {
 
     } catch (error) {
         console.error('Execution error:', error);
-        
-        // Broadcast error to all users
+
         broadcast(sessionId, {
             type: 'execution_result',
             result: {
@@ -162,7 +183,7 @@ function broadcast(sessionId, message, excludeUserId = null) {
 function broadcastUserList(sessionId) {
     const users = sessionStore.getSessionUsers(sessionId);
     const userList = users.map(u => ({ id: u.id }));
-    
+
     users.forEach(user => {
         if (user.ws.readyState === 1) {
             user.ws.send(JSON.stringify({

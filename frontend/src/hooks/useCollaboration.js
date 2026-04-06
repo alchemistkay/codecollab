@@ -1,105 +1,122 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 const getWebSocketURL = () => {
     const wsUrl = import.meta.env.VITE_COLLAB_WS;
-    
+
     if (wsUrl && wsUrl.startsWith('/')) {
         const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
         return `${protocol}//${window.location.host}${wsUrl}`;
     }
-    
+
     return wsUrl || 'ws://localhost:8003';
 };
 
 const RECONNECT_INTERVAL = 3000;
 const PING_INTERVAL = 25000;
 
-export function useCollaboration(sessionId, userId, onCodeUpdate, onExecutionResult, onExecutionStarted) {
+export function useCollaboration(
+    sessionId, userId,
+    onCodeUpdate, onExecutionResult, onExecutionStarted,
+    onLanguageUpdate, onCursorUpdate
+) {
     const [connected, setConnected] = useState(false);
     const [users, setUsers] = useState([]);
     const wsRef = useRef(null);
     const reconnectTimerRef = useRef(null);
     const pingTimerRef = useRef(null);
 
-    const connect = useCallback(() => {
+    useEffect(() => {
         if (!sessionId || !userId) return;
 
-        const baseUrl = getWebSocketURL();
-        const ws = new WebSocket(`${baseUrl}?session=${sessionId}&user=${userId}`);
-        wsRef.current = ws;
+        // connect is a plain local function — safe to call recursively from onclose
+        function connect() {
+            const baseUrl = getWebSocketURL();
+            const ws = new WebSocket(`${baseUrl}?session=${sessionId}&user=${userId}`);
+            wsRef.current = ws;
 
-        ws.onopen = () => {
-            console.log('WebSocket connected');
-            setConnected(true);
-            
-            pingTimerRef.current = setInterval(() => {
-                if (ws.readyState === WebSocket.OPEN) {
-                    ws.send(JSON.stringify({ type: 'ping' }));
+            ws.onopen = () => {
+                console.log('WebSocket connected');
+                setConnected(true);
+
+                pingTimerRef.current = setInterval(() => {
+                    if (ws.readyState === WebSocket.OPEN) {
+                        ws.send(JSON.stringify({ type: 'ping' }));
+                    }
+                }, PING_INTERVAL);
+            };
+
+            ws.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+
+                switch (message.type) {
+                    case 'init':
+                        if (message.code && onCodeUpdate) {
+                            onCodeUpdate(message.code);
+                        }
+                        break;
+
+                    case 'code_update':
+                        if (message.userId !== userId && onCodeUpdate) {
+                            onCodeUpdate(message.code);
+                        }
+                        break;
+
+                    case 'user_list':
+                        setUsers(message.users);
+                        break;
+
+                    case 'execution_started':
+                        if (onExecutionStarted) {
+                            onExecutionStarted(message.userId);
+                        }
+                        break;
+
+                    case 'execution_result':
+                        if (onExecutionResult) {
+                            onExecutionResult(message.result, message.userId);
+                        }
+                        break;
+
+                    case 'language_update':
+                        if (onLanguageUpdate) {
+                            onLanguageUpdate(message.language);
+                        }
+                        break;
+
+                    case 'cursor_update':
+                        if (onCursorUpdate) {
+                            onCursorUpdate(message.userId, message.position);
+                        }
+                        break;
+
+                    case 'pong':
+                        break;
+
+                    default:
+                        console.log('Unknown message type:', message.type);
                 }
-            }, PING_INTERVAL);
-        };
+            };
 
-        ws.onmessage = (event) => {
-            const message = JSON.parse(event.data);
-            
-            switch (message.type) {
-                case 'init':
-                    if (message.code && onCodeUpdate) {
-                        onCodeUpdate(message.code);
-                    }
-                    break;
-                
-                case 'code_update':
-                    if (message.userId !== userId && onCodeUpdate) {
-                        onCodeUpdate(message.code);
-                    }
-                    break;
-                
-                case 'user_list':
-                    setUsers(message.users);
-                    break;
+            ws.onclose = () => {
+                console.log('WebSocket disconnected');
+                setConnected(false);
 
-                case 'execution_started':
-                    if (onExecutionStarted) {
-                        onExecutionStarted(message.userId);
-                    }
-                    break;
+                if (pingTimerRef.current) {
+                    clearInterval(pingTimerRef.current);
+                    pingTimerRef.current = null;
+                }
 
-                case 'execution_result':
-                    if (onExecutionResult) {
-                        onExecutionResult(message.result, message.userId);
-                    }
-                    break;
+                reconnectTimerRef.current = setTimeout(() => {
+                    console.log('Attempting to reconnect...');
+                    connect();
+                }, RECONNECT_INTERVAL);
+            };
 
-                case 'pong':
-                    break;
-                
-                default:
-                    console.log('Unknown message type:', message.type);
-            }
-        };
+            ws.onerror = (error) => {
+                console.error('WebSocket error:', error);
+            };
+        }
 
-        ws.onclose = () => {
-            console.log('WebSocket disconnected');
-            setConnected(false);
-            
-            if (pingTimerRef.current) {
-                clearInterval(pingTimerRef.current);
-                pingTimerRef.current = null;
-            }
-
-            reconnectTimerRef.current = setTimeout(() => {
-                console.log('Attempting to reconnect...');
-                connect();
-            }, RECONNECT_INTERVAL);
-        };
-
-        ws.onerror = (error) => {
-            console.error('WebSocket error:', error);
-        };
-    }, [sessionId, userId, onCodeUpdate, onExecutionResult, onExecutionStarted]);
-
-    useEffect(() => {
         connect();
 
         return () => {
@@ -113,26 +130,31 @@ export function useCollaboration(sessionId, userId, onCodeUpdate, onExecutionRes
                 clearInterval(pingTimerRef.current);
             }
         };
-    }, [connect]);
+    }, [sessionId, userId, onCodeUpdate, onExecutionResult, onExecutionStarted, onLanguageUpdate, onCursorUpdate]);
 
     const sendCodeChange = (code) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-                type: 'code_change',
-                code
-            }));
+            wsRef.current.send(JSON.stringify({ type: 'code_change', code }));
         }
     };
 
     const executeCode = (language, code) => {
         if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-            wsRef.current.send(JSON.stringify({
-                type: 'execute_code',
-                language,
-                code
-            }));
+            wsRef.current.send(JSON.stringify({ type: 'execute_code', language, code }));
         }
     };
 
-    return { connected, users, sendCodeChange, executeCode };
+    const sendLanguageChange = (language) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'language_change', language }));
+        }
+    };
+
+    const sendCursorPosition = (position) => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.send(JSON.stringify({ type: 'cursor_position', position }));
+        }
+    };
+
+    return { connected, users, sendCodeChange, executeCode, sendLanguageChange, sendCursorPosition };
 }

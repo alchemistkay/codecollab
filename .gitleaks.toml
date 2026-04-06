@@ -1,0 +1,19 @@
+title = "CodeCollab Gitleaks Configuration"
+
+# Extend the default ruleset — don't replace it
+[extend]
+useDefault = true
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Known allow-listed paths
+#
+# infrastructure/k8s/base/secret.yaml contains a placeholder dev credential
+# that is intentionally committed as a K8s Secret manifest template.
+# In production this should be replaced with an external secrets operator
+# (e.g. External Secrets Operator + Vault / AWS Secrets Manager).
+# ─────────────────────────────────────────────────────────────────────────────
+[[allowlist]]
+description = "K8s Secret manifest — placeholder dev credential, not a real secret leak"
+paths = [
+  '''infrastructure/k8s/base/secret\.yaml''',
+]

@@ -3,18 +3,34 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session as DBSession
 from typing import List
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+import asyncio
 import os
 
-from database import get_db, init_db
+from database import get_db, init_db, SessionLocal
 from models import Session
 from schemas import SessionCreate, SessionUpdate, SessionResponse
 
+async def cleanup_expired_sessions():
+    while True:
+        await asyncio.sleep(3600)  # run every hour
+        try:
+            db = SessionLocal()
+            db.query(Session).filter(
+                Session.expires_at < datetime.utcnow(),
+                Session.is_active == True
+            ).update({'is_active': False})
+            db.commit()
+            db.close()
+        except Exception as e:
+            print(f"Session cleanup error: {e}")
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
     init_db()
+    task = asyncio.create_task(cleanup_expired_sessions())
     yield
-    # Shutdown (cleanup if needed)
+    task.cancel()
 
 app = FastAPI(
     title="CodeCollab Session Service",
@@ -47,11 +63,22 @@ def create_session(session_data: SessionCreate, db: DBSession = Depends(get_db))
     session = Session(
         title=session_data.title,
         language=session_data.language,
-        code=session_data.code
+        code=session_data.code,
+        expires_at=datetime.utcnow() + timedelta(days=7)
     )
     db.add(session)
     db.commit()
     db.refresh(session)
+    return session
+
+@app.get("/sessions/view/{view_id}", response_model=SessionResponse)
+def get_session_by_view_id(view_id: str, db: DBSession = Depends(get_db)):
+    """Get session by view_id (read-only token)"""
+    session = db.query(Session).filter(Session.view_id == view_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.expires_at and session.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=410, detail="Session expired")
     return session
 
 @app.get("/sessions/{session_id}", response_model=SessionResponse)
@@ -60,6 +87,8 @@ def get_session(session_id: str, db: DBSession = Depends(get_db)):
     session = db.query(Session).filter(Session.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    if session.expires_at and session.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=410, detail="Session expired")
     return session
 
 @app.get("/sessions", response_model=List[SessionResponse])
@@ -82,15 +111,18 @@ def update_session(
     session_update: SessionUpdate,
     db: DBSession = Depends(get_db)
 ):
-    """Update session"""
+    """Update session and reset expiry"""
     session = db.query(Session).filter(Session.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     update_data = session_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(session, field, value)
-    
+
+    # Reset expiry on every update (7-day rolling TTL)
+    session.expires_at = datetime.utcnow() + timedelta(days=7)
+
     db.commit()
     db.refresh(session)
     return session
@@ -101,7 +133,7 @@ def delete_session(session_id: str, db: DBSession = Depends(get_db)):
     session = db.query(Session).filter(Session.id == session_id).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
-    
+
     session.is_active = False
     db.commit()
     return None

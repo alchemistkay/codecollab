@@ -1,0 +1,95 @@
+version: 2
+updates:
+  # ── GitHub Actions ───────────────────────────────────────────
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, github-actions]
+    commit-message:
+      prefix: "chore(ci)"
+
+  # ── Frontend (React / Vite) ──────────────────────────────────
+  - package-ecosystem: npm
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, frontend]
+    commit-message:
+      prefix: "chore(deps)"
+    groups:
+      react:
+        patterns: ["react", "react-dom", "react-router-dom"]
+      monaco:
+        patterns: ["@monaco-editor/*"]
+      vite:
+        patterns: ["vite", "@vitejs/*"]
+
+  # ── Collaboration Service (Node.js) ─────────────────────────
+  - package-ecosystem: npm
+    directory: /services/collaboration-service
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, collaboration-service]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── Session Service (Python) ─────────────────────────────────
+  - package-ecosystem: pip
+    directory: /services/session-service
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, session-service]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── Execution Service (Go) ───────────────────────────────────
+  - package-ecosystem: gomod
+    directory: /services/execution-service
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, execution-service]
+    commit-message:
+      prefix: "chore(deps)"
+
+  # ── Docker base images ───────────────────────────────────────
+  - package-ecosystem: docker
+    directory: /frontend
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, docker, frontend]
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: docker
+    directory: /services/session-service
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, docker, session-service]
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: docker
+    directory: /services/execution-service
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, docker, execution-service]
+    commit-message:
+      prefix: "chore(docker)"
+
+  - package-ecosystem: docker
+    directory: /services/collaboration-service
+    schedule:
+      interval: weekly
+      day: monday
+    labels: [dependencies, docker, collaboration-service]
+    commit-message:
+      prefix: "chore(docker)"
