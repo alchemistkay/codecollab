@@ -9,6 +9,7 @@ class Session(Base):
     __tablename__ = "sessions"
 
     id = Column(String(12), primary_key=True, default=lambda: secrets.token_urlsafe(8))
+    view_id = Column(String(12), unique=True, nullable=False, default=lambda: secrets.token_urlsafe(8))
     title = Column(String(255), nullable=False)
     language = Column(String(50), nullable=False, default="python")
     code = Column(Text, default="")

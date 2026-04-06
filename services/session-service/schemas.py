@@ -22,6 +22,7 @@ class SessionUpdate(BaseModel):
 
 class SessionResponse(BaseModel):
     id: str
+    view_id: str
     title: str
     language: str
     code: str

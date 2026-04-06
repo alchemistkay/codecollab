@@ -341,7 +341,7 @@ function Hero({ onStart }) {
             Start a Session
           </button>
 
-          <a href="https://github.com" target="_blank" rel="noreferrer" style={{
+          <a href="https://github.com/alchemistkay/codecollab" target="_blank" rel="noreferrer" style={{
             padding: '11px 20px',
             backgroundColor: 'transparent', color: C.text2,
             border: `1px solid ${C.border}`,

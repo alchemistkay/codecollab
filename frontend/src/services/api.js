@@ -18,6 +18,11 @@ export const sessionAPI = {
         return response.data;
     },
 
+    getByViewId: async (viewId) => {
+        const response = await axios.get(`${SESSION_API}/sessions/view/${viewId}`);
+        return response.data;
+    },
+
     list: async () => {
         const response = await axios.get(`${SESSION_API}/sessions`);
         return response.data;

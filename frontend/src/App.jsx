@@ -82,11 +82,11 @@ function LinkRow({ label, link, copied, onCopy, primary }) {
 }
 
 // ─── Share Modal ──────────────────────────────────────────────────────────────
-function ShareModal({ sessionId, onClose }) {
+function ShareModal({ sessionId, viewId, onClose }) {
   const [copiedEdit, setCopiedEdit] = useState(false);
   const [copiedView, setCopiedView] = useState(false);
   const editLink = `${window.location.origin}/s/${sessionId}`;
-  const viewLink = `${window.location.origin}/s/${sessionId}/view`;
+  const viewLink = `${window.location.origin}/s/${viewId}/view`;
 
   const copyLink = async (text, setFlag) => {
     try {
@@ -269,6 +269,7 @@ function EditorRoute({ readOnly = false }) {
   const userId = useRef(generateUserId()).current;
 
   const [sessionId, setSessionId] = useState(null);
+  const [viewId, setViewId] = useState(null);
   const [loadState, setLoadState] = useState('loading'); // 'loading' | 'ready' | 'expired' | 'error'
   const [code, setCode] = useState('');
   const [language, setLanguage] = useState('python');
@@ -328,8 +329,11 @@ function EditorRoute({ readOnly = false }) {
 
   const loadSession = async (sid) => {
     try {
-      const session = await sessionAPI.get(sid);
+      const session = readOnly
+        ? await sessionAPI.getByViewId(sid)
+        : await sessionAPI.get(sid);
       setSessionId(session.id);
+      setViewId(session.view_id);
       setCode(session.code || 'print("Hello, CodeCollab!")');
       setLanguage(session.language);
       setLoadState('ready');
@@ -414,8 +418,8 @@ function EditorRoute({ readOnly = false }) {
       backgroundColor: C.bg, color: C.text,
       overflow: 'hidden',
     }}>
-      {shareOpen && sessionId && (
-        <ShareModal sessionId={sessionId} onClose={() => setShareOpen(false)} />
+      {shareOpen && sessionId && viewId && (
+        <ShareModal sessionId={sessionId} viewId={viewId} onClose={() => setShareOpen(false)} />
       )}
 
       {/* ── Header ── */}
@@ -446,8 +450,8 @@ function EditorRoute({ readOnly = false }) {
         </button>
 
         <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-          {/* Share */}
-          {sessionId && (
+          {/* Share — hidden in read-only mode */}
+          {sessionId && !readOnly && (
             <button
               onClick={() => setShareOpen(true)}
               style={{

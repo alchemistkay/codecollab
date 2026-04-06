@@ -71,6 +71,16 @@ def create_session(session_data: SessionCreate, db: DBSession = Depends(get_db))
     db.refresh(session)
     return session
 
+@app.get("/sessions/view/{view_id}", response_model=SessionResponse)
+def get_session_by_view_id(view_id: str, db: DBSession = Depends(get_db)):
+    """Get session by view_id (read-only token)"""
+    session = db.query(Session).filter(Session.view_id == view_id).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.expires_at and session.expires_at < datetime.utcnow():
+        raise HTTPException(status_code=410, detail="Session expired")
+    return session
+
 @app.get("/sessions/{session_id}", response_model=SessionResponse)
 def get_session(session_id: str, db: DBSession = Depends(get_db)):
     """Get session by ID"""
